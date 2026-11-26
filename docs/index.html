@@ -65,6 +65,13 @@ a.act:hover{text-decoration:underline}
 .empty{background:#fff;border:1px solid var(--line);border-radius:4px;padding:22px;text-align:center;color:var(--gray)}
 footer{text-align:center;color:var(--gray);font-size:.85rem;padding:14px 16px calc(26px + var(--safe-b))}
 footer img{height:26px;width:auto;display:block;margin:0 auto 6px}
+.vbtn{min-height:48px;padding:6px 16px;border:1px solid var(--dnavy);border-radius:4px;background:#fff;color:var(--dnavy);font:700 .95rem/1 "Barlow Semi Condensed",sans-serif;text-transform:uppercase;letter-spacing:.04em;cursor:pointer}
+.vbtn.on{background:var(--navy);color:#fff}
+.more{display:block;width:100%;min-height:52px;margin:4px 0 14px;border:1px solid var(--dnavy);border-radius:4px;background:#fff;color:var(--dnavy);font:700 1.05rem/1 "Barlow Semi Condensed",sans-serif;text-transform:uppercase;letter-spacing:.04em;cursor:pointer}
+body.compact .card{padding:8px 12px;margin-bottom:6px}
+body.compact .card .nm{font-size:1.1rem}
+body.compact .flags,body.compact .src,body.compact .marks{display:none}
+body.compact .kv div{padding:1px 0}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -99,7 +106,13 @@ footer img{height:26px;width:auto;display:block;margin:0 auto 6px}
         <div><label class="fl" for="f-contact-f">Contacted</label>
           <select id="f-contact-f"><option value="">All</option><option value="contacted">Contacted</option><option value="not">Not contacted yet</option><option value="responded">Responded</option></select></div>
         <div><label class="fl" for="f-sort">Sort</label>
-          <select id="f-sort"><option value="rank">Ranked (production first)</option><option value="az">Company A–Z</option><option value="pri">Priority A–C</option></select></div>
+          <select id="f-sort"><option value="rank">Ranked (production first)</option><option value="az">Company A–Z</option><option value="za">Company Z–A</option><option value="pri">Priority A–C</option><option value="contacted-new">Contacted — newest first</option><option value="contacted-old">Contacted — longest ago (follow up)</option><option value="emailed">Most emailed</option><option value="county">County A–Z</option></select></div>
+      </div>
+      <label class="fl">View</label>
+      <div class="checks" style="margin-top:0">
+        <button type="button" class="vbtn on" id="v-cards">Cards</button>
+        <button type="button" class="vbtn" id="v-compact">Compact list</button>
+        <label class="chk"><input type="checkbox" id="f-hideempty"> Hide rows with no contact info</label>
       </div>
       <div class="checks">
         <label class="chk"><input type="checkbox" id="f-email"> Has email</label>
@@ -119,6 +132,8 @@ footer img{height:26px;width:auto;display:block;margin:0 auto 6px}
       <input type="search" id="aq" placeholder="Office, city, county…" autocomplete="off">
       <div class="frow">
         <div><label class="fl" for="a-county">County</label><select id="a-county"></select></div>
+        <div><label class="fl" for="a-sort">Sort</label>
+          <select id="a-sort"><option value="az">Office A–Z</option><option value="county">County A–Z</option><option value="deleg">Delegated first</option></select></div>
       </div>
       <div class="checks">
         <label class="chk"><input type="checkbox" id="a-deleg"> Delegated to county only</label>
@@ -240,12 +255,28 @@ function renderLeads(){
     }
     return true;
   });
+  if (document.getElementById("f-hideempty").checked)
+    rows = rows.filter(function(l){ return l.phone || l.email || l.contact; });
   if (sort === "az") rows.sort(function(a,b){return a.company.localeCompare(b.company)});
+  if (sort === "za") rows.sort(function(a,b){return b.company.localeCompare(a.company)});
   if (sort === "pri") rows.sort(function(a,b){return a.priority.localeCompare(b.priority) || a.company.localeCompare(b.company)});
-  document.getElementById("lead-count").textContent = "Showing " + rows.length + " of " + DATA.leads.length + " builders";
-  document.getElementById("lead-list").innerHTML = rows.length
-    ? rows.map(leadCard).join("")
+  if (sort === "contacted-new") rows.sort(function(a,b){return (eff(b).contacted || "").localeCompare(eff(a).contacted || "") || a.company.localeCompare(b.company)});
+  if (sort === "contacted-old") rows.sort(function(a,b){
+    var ca = eff(a).contacted, cb = eff(b).contacted;
+    if (!ca && !cb) return a.company.localeCompare(b.company);
+    if (!ca) return 1; if (!cb) return -1;
+    return ca.localeCompare(cb) || a.company.localeCompare(b.company);
+  });
+  if (sort === "emailed") rows.sort(function(a,b){return (b.sent_count||0) - (a.sent_count||0) || a.company.localeCompare(b.company)});
+  if (sort === "county") rows.sort(function(a,b){return (countiesOf(a)[0]||"~").localeCompare(countiesOf(b)[0]||"~") || a.company.localeCompare(b.company)});
+  var total = rows.length;
+  var page = rows.slice(0, SHOWN);
+  document.getElementById("lead-count").textContent = "Showing " + page.length + " of " + total + " builders (" + DATA.leads.length + " tracked)";
+  document.getElementById("lead-list").innerHTML = total
+    ? page.map(leadCard).join("") + (total > SHOWN ? '<button class="more" id="more-leads">Show more — ' + (total - SHOWN) + ' remaining</button>' : "")
     : '<div class="empty">No builders match those filters.</div>';
+  var mb = document.getElementById("more-leads");
+  if (mb) mb.addEventListener("click", function(){ SHOWN += 100; renderLeads(); });
 }
 function ahjCard(o){
   var delegated = o.via && o.via.toLowerCase() !== "own office";
@@ -273,20 +304,44 @@ function renderAhj(){
     }
     return true;
   });
-  document.getElementById("ahj-count").textContent = "Showing " + rows.length + " of " + DATA.ahj.length + " permit offices";
-  document.getElementById("ahj-list").innerHTML = rows.length
-    ? rows.map(ahjCard).join("")
+  var asort = document.getElementById("a-sort").value;
+  if (asort === "az") rows.sort(function(a,b){return a.ahj.localeCompare(b.ahj)});
+  if (asort === "county") rows.sort(function(a,b){return a.county.localeCompare(b.county) || a.ahj.localeCompare(b.ahj)});
+  if (asort === "deleg") rows.sort(function(a,b){
+    var da = (a.via && a.via.toLowerCase() !== "own office") ? 0 : 1;
+    var db = (b.via && b.via.toLowerCase() !== "own office") ? 0 : 1;
+    return da - db || a.ahj.localeCompare(b.ahj);
+  });
+  var atotal = rows.length;
+  var apage = rows.slice(0, ASHOWN);
+  document.getElementById("ahj-count").textContent = "Showing " + apage.length + " of " + atotal + " permit offices";
+  document.getElementById("ahj-list").innerHTML = atotal
+    ? apage.map(ahjCard).join("") + (atotal > ASHOWN ? '<button class="more" id="more-ahj">Show more — ' + (atotal - ASHOWN) + ' remaining</button>' : "")
     : '<div class="empty">No permit offices match those filters.</div>';
+  var ab = document.getElementById("more-ahj");
+  if (ab) ab.addEventListener("click", function(){ ASHOWN += 100; renderAhj(); });
 }
+var SHOWN = 100, ASHOWN = 100;
 function wire(){
-  ["q","f-county","f-type","f-pri","f-list","f-status","f-contact-f","f-sort","f-email","f-phone","f-contact"].forEach(function(id){
+  ["q","f-county","f-type","f-pri","f-list","f-status","f-contact-f","f-sort","f-email","f-phone","f-contact","f-hideempty"].forEach(function(id){
     var el = document.getElementById(id);
-    el.addEventListener("input", renderLeads); el.addEventListener("change", renderLeads);
+    var h = function(){ SHOWN = 100; renderLeads(); };
+    el.addEventListener("input", h); el.addEventListener("change", h);
   });
-  ["aq","a-county","a-deleg"].forEach(function(id){
+  ["aq","a-county","a-deleg","a-sort"].forEach(function(id){
     var el = document.getElementById(id);
-    el.addEventListener("input", renderAhj); el.addEventListener("change", renderAhj);
+    var h = function(){ ASHOWN = 100; renderAhj(); };
+    el.addEventListener("input", h); el.addEventListener("change", h);
   });
+  var vc = document.getElementById("v-cards"), vk = document.getElementById("v-compact");
+  function setView(compact){
+    document.body.classList.toggle("compact", compact);
+    vc.classList.toggle("on", !compact); vk.classList.toggle("on", compact);
+    try { localStorage.setItem("lt-view:v1", compact ? "compact" : "cards"); } catch(e){}
+  }
+  vc.addEventListener("click", function(){ setView(false); });
+  vk.addEventListener("click", function(){ setView(true); });
+  try { if (localStorage.getItem("lt-view:v1") === "compact") setView(true); } catch(e){}
   document.getElementById("lead-list").addEventListener("click", function(ev){
     var b = ev.target.closest("button[data-mark]");
     if (!b) return;
