@@ -63,7 +63,7 @@ def main():
 
     data = json.load(open(plain_path))
     leads, ahj = data.get("leads", []), data.get("ahj", [])
-    assert len(leads) == 863, f"expected 863 leads, got {len(leads)}"
+    assert len(leads) >= 1900, f"expected 1900+ leads, got {len(leads)}"
     assert len(ahj) == 194, f"expected 194 ahj rows, got {len(ahj)}"
     salt, iv = os.urandom(16), os.urandom(12)
     key = derive(get_code(True), salt)

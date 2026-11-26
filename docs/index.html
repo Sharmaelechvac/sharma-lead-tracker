@@ -36,6 +36,7 @@ input[type=search],select{width:100%;min-height:50px;padding:8px 10px;border:1px
 .checks{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .chk{display:inline-flex;align-items:center;gap:8px;min-height:48px;padding:6px 14px;border:1px solid var(--line);border-radius:4px;background:#fff;cursor:pointer;font-weight:600}
 .chk input{width:22px;height:22px;accent-color:var(--navy)}
+.note{font-size:.85rem;color:var(--gray);margin-top:10px}
 .count{color:var(--gray);font-size:.92rem;margin:4px 0 10px}
 .card{background:#fff;border:1px solid var(--line);border-radius:4px;padding:12px 14px;margin-bottom:10px}
 .card .nm{font:700 1.3rem/1.15 "Barlow Semi Condensed",sans-serif;color:var(--dnavy)}
@@ -44,17 +45,25 @@ input[type=search],select{width:100%;min-height:50px;padding:8px 10px;border:1px
 .chip.pa{background:var(--gold);border-color:var(--gold);color:var(--dnavy)}
 .chip.pb{background:var(--navy);border-color:var(--navy);color:#fff}
 .chip.rs{border-color:var(--gold);color:var(--dnavy)}
+.chip.client{background:var(--gold);border-color:var(--gold);color:var(--dnavy)}
+.chip.dnc{background:var(--ink);border-color:var(--ink);color:#fff}
+.chip.pub{background:var(--gray);border-color:var(--gray);color:#fff}
+.chip.contacted{border-color:var(--navy);color:var(--navy)}
+.chip.responded{background:var(--dnavy);border-color:var(--dnavy);color:#fff}
 .chip.via{background:var(--dnavy);border-color:var(--dnavy);color:#fff}
 .meta{color:var(--gray);font-size:.95rem}
 .kv{margin-top:6px}
 .kv div{padding:3px 0}
-.kv .k{color:var(--gray);font-size:.82rem;text-transform:uppercase;letter-spacing:.04em;display:inline-block;min-width:86px}
+.kv .k{color:var(--gray);font-size:.82rem;text-transform:uppercase;letter-spacing:.04em;display:inline-block;min-width:96px}
 a.act{color:var(--navy);font-weight:600;text-decoration:none;overflow-wrap:anywhere}
 a.act:hover{text-decoration:underline}
 .flags{margin-top:8px;font-size:.88rem;color:var(--gray);border-top:1px solid var(--line);padding-top:8px;overflow-wrap:anywhere}
 .src{font-size:.82rem;color:var(--gray);margin-top:4px}
+.marks{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
+.marks button{min-height:48px;padding:6px 14px;border:1px solid var(--dnavy);border-radius:4px;background:#fff;color:var(--dnavy);font:700 .95rem/1 "Barlow Semi Condensed",sans-serif;text-transform:uppercase;letter-spacing:.04em;cursor:pointer}
+.marks button.done{background:var(--navy);color:#fff}
 .empty{background:#fff;border:1px solid var(--line);border-radius:4px;padding:22px;text-align:center;color:var(--gray)}
-footer{text-align:center;color:var(--muted,#5b6478);font-size:.85rem;padding:14px 16px calc(26px + var(--safe-b))}
+footer{text-align:center;color:var(--gray);font-size:.85rem;padding:14px 16px calc(26px + var(--safe-b))}
 footer img{height:26px;width:auto;display:block;margin:0 auto 6px}
 [hidden]{display:none!important}
 </style>
@@ -83,8 +92,12 @@ footer img{height:26px;width:auto;display:block;margin:0 auto 6px}
         <div><label class="fl" for="f-type">Type</label><select id="f-type"></select></div>
         <div><label class="fl" for="f-pri">Priority</label>
           <select id="f-pri"><option value="">All priorities</option><option>A</option><option>B</option><option>C</option></select></div>
-        <div><label class="fl" for="f-tier">List</label>
-          <select id="f-tier"><option value="Master">Master 500</option><option value="">Master + Reserves</option><option value="Reserve">Reserves only</option></select></div>
+        <div><label class="fl" for="f-list">List</label>
+          <select id="f-list"><option value="">All lists</option><option>Master 500</option><option>Reserve</option><option>Board</option></select></div>
+        <div><label class="fl" for="f-status">Status</label>
+          <select id="f-status"><option value="">All statuses</option><option>Lead</option><option>Client</option><option>Do not contact</option><option>Public sector</option></select></div>
+        <div><label class="fl" for="f-contact-f">Contacted</label>
+          <select id="f-contact-f"><option value="">All</option><option value="contacted">Contacted</option><option value="not">Not contacted yet</option><option value="responded">Responded</option></select></div>
         <div><label class="fl" for="f-sort">Sort</label>
           <select id="f-sort"><option value="rank">Ranked (production first)</option><option value="az">Company A–Z</option><option value="pri">Priority A–C</option></select></div>
       </div>
@@ -93,6 +106,7 @@ footer img{height:26px;width:auto;display:block;margin:0 auto 6px}
         <label class="chk"><input type="checkbox" id="f-phone"> Has phone</label>
         <label class="chk"><input type="checkbox" id="f-contact"> Named contact</label>
       </div>
+      <div class="note">Contact marks come from Sharma's email history. Marks you tap save on this device — tell Jarvis to make them permanent.</div>
     </div>
     <div class="count" id="lead-count"></div>
     <div id="lead-list"></div>
@@ -122,7 +136,19 @@ footer img{height:26px;width:auto;display:block;margin:0 auto 6px}
 <script>
 "use strict";
 var DATA = null;
+var MARKS_KEY = "lt-marks:v1";
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function normName(n){return String(n||"").toUpperCase().replace(/[^A-Z0-9 ]/g," ").replace(/\s+/g," ").trim()}
+function getMarks(){ try { return JSON.parse(localStorage.getItem(MARKS_KEY) || "{}"); } catch(e){ return {}; } }
+function setMarks(m){ try { localStorage.setItem(MARKS_KEY, JSON.stringify(m)); } catch(e){} }
+function eff(l){
+  var m = getMarks()[normName(l.company)] || {};
+  return {
+    contacted: m.contacted || l.contacted || "",
+    responded: (m.responded || l.responded === "Yes") ? "Yes" : "",
+    device: !!m.contacted || !!m.responded
+  };
+}
 function countiesOf(l){return l.county.split(";").map(function(s){return s.trim()}).filter(Boolean)}
 function uniqSorted(arr){var s={},o=[];arr.forEach(function(x){if(x&&!s[x]){s[x]=1;o.push(x)}});return o.sort()}
 function fillSelect(el, values, allLabel){
@@ -136,32 +162,51 @@ function siteLink(w){
 }
 function renderStats(){
   var L = DATA.leads;
-  var master = L.filter(function(l){return l.tier==="Master"}).length;
-  var a = L.filter(function(l){return l.priority==="A"}).length;
-  var em = L.filter(function(l){return l.email}).length;
+  var master = L.filter(function(l){return l.list==="Master 500"}).length;
+  var contacted = L.filter(function(l){return eff(l).contacted}).length;
+  var responded = L.filter(function(l){return eff(l).responded}).length;
   var st = [
-    [L.length,"builder / GC leads"],[master,"in the master 500"],[a,"A priority"],
-    [em,"with email"],[DATA.ahj.length,"permit offices"]
+    [L.length,"builders / GCs tracked"],[master,"in the master 500"],
+    [contacted,"contacted"],[responded,"responded"],[DATA.ahj.length,"permit offices"]
   ];
   document.getElementById("stats").innerHTML = st.map(function(s){
     return '<div class="stat"><b>'+s[0]+'</b><span>'+s[1]+'</span></div>';
   }).join("");
 }
+function statusChip(l){
+  if (l.status === "Client") return '<span class="chip client">Client</span>';
+  if (l.status === "Do not contact") return '<span class="chip dnc">Do not contact</span>';
+  if (l.status === "Public sector") return '<span class="chip pub">Public sector</span>';
+  return "";
+}
 function leadCard(l){
+  var e = eff(l);
   var chips = '<span class="chip p'+l.priority.toLowerCase()+'">'+esc(l.priority)+' priority</span>'
     + '<span class="chip">'+esc(l.type)+'</span>'
-    + (l.tier==="Reserve" ? '<span class="chip rs">Reserve</span>' : '');
+    + (l.list !== "Master 500" ? '<span class="chip rs">'+esc(l.list)+'</span>' : '')
+    + statusChip(l)
+    + (e.contacted ? '<span class="chip contacted">Contacted '+esc(e.contacted)+'</span>' : '')
+    + (e.responded ? '<span class="chip responded">Responded</span>' : '');
   var kv = "";
   if (l.contact) kv += '<div><span class="k">Contact</span>'+esc(l.contact)+'</div>';
   if (l.phone) kv += '<div><span class="k">Phone</span>'+telLink(l.phone)+'</div>';
   if (l.email) kv += '<div><span class="k">Email</span><a class="act" href="mailto:'+esc(l.email)+'">'+esc(l.email)+'</a></div>';
   if (l.website) kv += '<div><span class="k">Website</span>'+siteLink(l.website)+'</div>';
+  if (e.contacted) kv += '<div><span class="k">Contacted</span>'+esc(e.contacted)+(l.contact_note ? ' · '+esc(l.contact_note) : '')+(e.device ? ' · marked on this device' : '')+'</div>';
+  if (e.responded) kv += '<div><span class="k">Responded</span>Yes</div>';
+  var key = normName(l.company);
+  var marks = '<div class="marks">'
+    + '<button data-mark="contacted" data-key="'+esc(key)+'" class="'+(e.contacted?'done':'')+'">'+(e.contacted?'Contacted ✓':'Mark contacted')+'</button>'
+    + '<button data-mark="responded" data-key="'+esc(key)+'" class="'+(e.responded?'done':'')+'">'+(e.responded?'Responded ✓':'Mark responded')+'</button>'
+    + (e.device ? '<button data-mark="clear" data-key="'+esc(key)+'">Clear my marks</button>' : '')
+    + '</div>';
   return '<article class="card"><div class="nm">'+esc(l.company)+'</div>'
     + '<div class="chips">'+chips+'</div>'
     + '<div class="meta">'+esc(l.county)+'</div>'
     + (kv ? '<div class="kv">'+kv+'</div>' : '')
     + (l.source ? '<div class="src">Source: '+esc(l.source)+'</div>' : '')
     + (l.flags ? '<div class="flags">'+esc(l.flags)+'</div>' : '')
+    + marks
     + '</article>';
 }
 function renderLeads(){
@@ -169,16 +214,23 @@ function renderLeads(){
   var county = document.getElementById("f-county").value;
   var type = document.getElementById("f-type").value;
   var pri = document.getElementById("f-pri").value;
-  var tier = document.getElementById("f-tier").value;
+  var list = document.getElementById("f-list").value;
+  var status = document.getElementById("f-status").value;
+  var cf = document.getElementById("f-contact-f").value;
   var sort = document.getElementById("f-sort").value;
   var fe = document.getElementById("f-email").checked;
   var fp = document.getElementById("f-phone").checked;
   var fc = document.getElementById("f-contact").checked;
   var rows = DATA.leads.filter(function(l){
-    if (tier && l.tier !== tier) return false;
+    if (list && l.list !== list) return false;
+    if (status && l.status !== status) return false;
     if (county && countiesOf(l).indexOf(county) === -1) return false;
     if (type && l.type !== type) return false;
     if (pri && l.priority !== pri) return false;
+    var e = eff(l);
+    if (cf === "contacted" && !e.contacted) return false;
+    if (cf === "not" && e.contacted) return false;
+    if (cf === "responded" && !e.responded) return false;
     if (fe && !l.email) return false;
     if (fp && !l.phone) return false;
     if (fc && !l.contact) return false;
@@ -190,10 +242,10 @@ function renderLeads(){
   });
   if (sort === "az") rows.sort(function(a,b){return a.company.localeCompare(b.company)});
   if (sort === "pri") rows.sort(function(a,b){return a.priority.localeCompare(b.priority) || a.company.localeCompare(b.company)});
-  document.getElementById("lead-count").textContent = "Showing " + rows.length + " of " + DATA.leads.length + " leads";
+  document.getElementById("lead-count").textContent = "Showing " + rows.length + " of " + DATA.leads.length + " builders";
   document.getElementById("lead-list").innerHTML = rows.length
     ? rows.map(leadCard).join("")
-    : '<div class="empty">No leads match those filters.</div>';
+    : '<div class="empty">No builders match those filters.</div>';
 }
 function ahjCard(o){
   var delegated = o.via && o.via.toLowerCase() !== "own office";
@@ -227,13 +279,27 @@ function renderAhj(){
     : '<div class="empty">No permit offices match those filters.</div>';
 }
 function wire(){
-  ["q","f-county","f-type","f-pri","f-tier","f-sort","f-email","f-phone","f-contact"].forEach(function(id){
+  ["q","f-county","f-type","f-pri","f-list","f-status","f-contact-f","f-sort","f-email","f-phone","f-contact"].forEach(function(id){
     var el = document.getElementById(id);
     el.addEventListener("input", renderLeads); el.addEventListener("change", renderLeads);
   });
   ["aq","a-county","a-deleg"].forEach(function(id){
     var el = document.getElementById(id);
     el.addEventListener("input", renderAhj); el.addEventListener("change", renderAhj);
+  });
+  document.getElementById("lead-list").addEventListener("click", function(ev){
+    var b = ev.target.closest("button[data-mark]");
+    if (!b) return;
+    var marks = getMarks(), key = b.getAttribute("data-key"), kind = b.getAttribute("data-mark");
+    var today = new Date().toISOString().slice(0,10);
+    if (kind === "clear") delete marks[key];
+    else {
+      marks[key] = marks[key] || {};
+      if (kind === "contacted") marks[key].contacted = marks[key].contacted ? "" : today;
+      if (kind === "responded") marks[key].responded = !marks[key].responded;
+      if (!marks[key].contacted && !marks[key].responded) delete marks[key];
+    }
+    setMarks(marks); renderStats(); renderLeads();
   });
   var tl = document.getElementById("tab-leads"), ta = document.getElementById("tab-ahj");
   tl.addEventListener("click", function(){ tl.classList.add("on"); ta.classList.remove("on");
